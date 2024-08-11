@@ -1,0 +1,115 @@
+#![no_std]
+#![no_main]
+
+/// USART1 reads GPS data from a GP-735T and sends it over USART2.
+
+use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
+use cortex_m_rt::entry;
+use stm32l4::stm32l4x2::{self, interrupt};
+
+static mut USART1_PERIPHERAL: Option<stm32l4x2::USART1> = None;
+static mut USART2_PERIPHERAL: Option<stm32l4x2::USART2> = None;
+static mut GPIOB_PERIPHERAL: Option<stm32l4x2::GPIOB> = None;
+
+#[interrupt]
+fn USART1() {
+    let usart1 = unsafe { USART1_PERIPHERAL.as_mut() }.unwrap();
+    let usart2 = unsafe { USART2_PERIPHERAL.as_mut() }.unwrap();
+    if usart1.isr.read().rxne().bit_is_set() {
+        // Read off USART1 RX
+        let received_byte = usart1.rdr.read().rdr().bits(); // Reading RDR clears RXNE
+        // Write to USART2 TX
+        while usart2.isr.read().txe().bit_is_clear() {} // Poll TXE, should already be set
+        usart2.tdr.write(|w| w.tdr().bits(received_byte));
+    }
+}
+
+// #[interrupt]
+// fn USART2() {
+//     let usart2 = unsafe { USART2_PERIPHERAL.as_mut().unwrap() };
+//     let gpiob = unsafe { GPIOB_PERIPHERAL.as_mut().unwrap()};
+//     if usart2.isr.read().rxne().bit_is_set() {
+//         // Read off USART2 RX
+//         let received_byte = usart2.rdr.read().rdr().bits(); // Reading RDR clears RXNE
+//         while usart2.isr.read().txe().bit_is_clear() {} // Poll TXE, should already be set
+//         usart2.tdr.write(|w| w.tdr().bits(received_byte));
+//         if gpiob.odr.read().odr6().bit_is_set() {
+//             gpiob.bsrr.write(|w| w.br6().set_bit());
+//         } else {
+//             gpiob.bsrr.write(|w| w.bs6().set_bit());
+//         }
+//     }
+// }
+
+#[entry]
+fn main() -> ! {
+    // Device defaults to 4MHz clock
+
+    let dp = stm32l4x2::Peripherals::take().unwrap();
+
+    // Enable peripheral clocks - GPIOA, USART1
+    dp.RCC.ahb2enr.write(|w| w.gpioaen().set_bit().gpioben().set_bit());
+    dp.RCC.apb2enr.write(|w| w.usart1en().set_bit());
+    dp.RCC.apb1enr1.write(|w| w.usart2en().set_bit());
+
+    // USART1: Configure A9 (TX), A10 (RX) as alternate function 7
+    // USART2: Configure A2 (TX), A3 (RX) as alternate function 7
+    // GPIOA: A12 as push-pull output
+    dp.GPIOB.moder.write(|w| w.moder6().output());
+    dp.GPIOB.otyper.write(|w| w.ot6().push_pull());
+
+    dp.GPIOA
+        .moder
+        .write(|w| w.moder2().alternate().moder3().alternate().moder9().alternate().moder10().alternate().moder12().output());
+    // dp.GPIOA.otyper.write(|w| w.ot12().push_pull());
+    // dp.GPIOA.odr.write(|w| w.odr12().set_bit());
+    dp.GPIOA
+        .ospeedr
+        .write(|w| w.ospeedr2().high_speed().ospeedr3().high_speed().ospeedr9().high_speed().ospeedr10().high_speed());
+    dp.GPIOA.afrl.write(|w| w.afrl2().af7().afrl3().af7());
+    dp.GPIOA.afrh.write(|w| w.afrh9().af7().afrh10().af7());
+
+    // Configure baud rate 9600
+    dp.USART1.brr.write(|w| w.brr().bits(417)); // 4Mhz / 38400 approx. 104
+    dp.USART2.brr.write(|w| w.brr().bits(417)); // 4Mhz / 9600 approx. 417
+
+    // Enable USART, transmitter, receiver and RXNE interrupt
+    dp.USART1.cr1.write(|w| {
+        w.re()
+            .enabled()
+            .ue()
+            .enabled()
+            .rxneie()
+            .enabled()
+    });
+    dp.USART2.cr1.write(|w| {
+        w.te()
+            .enabled()
+            .re()
+            .enabled()
+            .ue()
+            .enabled()
+            // .rxneie()
+            // .enabled()
+    });
+
+    unsafe {
+        // Unmask NVIC USART1 global interrupt
+        cortex_m::peripheral::NVIC::unmask(stm32l4x2::Interrupt::USART1);
+        // cortex_m::peripheral::NVIC::unmask(stm32l4x2::Interrupt::USART2);
+        USART1_PERIPHERAL = Some(dp.USART1);
+        USART2_PERIPHERAL = Some(dp.USART2);
+    }
+    dp.GPIOB.bsrr.write(|w| w.bs6().set_bit());
+    unsafe {
+        GPIOB_PERIPHERAL = Some(dp.GPIOB);
+    }
+
+    #[allow(clippy::empty_loop)]
+    loop {
+        // while dp.USART1.isr.read().rxne().bit_is_clear() {} // Poll TXE, should already be set
+        // let received_byte = dp.USART1.rdr.read().bits();
+        // while unsafe {USART2_PERIPHERAL.as_mut().unwrap()}.isr.read().txe().bit_is_clear() {} // Poll TXE, should already be set
+        // unsafe {USART2_PERIPHERAL.as_mut().unwrap()}.tdr.write(|w| w.tdr().bits(received_byte as u16));
+    }
+}
