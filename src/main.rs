@@ -18,9 +18,11 @@ fn USART1() {
         // Read off USART1 RX
         let received_byte = usart1.rdr.read().rdr().bits(); // Reading RDR clears RXNE
 
-        // Write to USART2 TX
-        while usart2.isr.read().txe().bit_is_clear() {} // Poll TXE, should already be set
-        usart2.tdr.write(|w| w.tdr().bits(received_byte));
+        if received_byte != 0 {
+            // Write to USART2 TX
+            while usart2.isr.read().txe().bit_is_clear() {} // Poll TXE, should already be set
+            usart2.tdr.write(|w| w.tdr().bits(received_byte));
+        }
     }
 }
 
