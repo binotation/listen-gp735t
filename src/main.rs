@@ -1,8 +1,9 @@
+//! USART1 reads GPS data from GP-735T and sends it over USART2.
+
 #![no_std]
 #![no_main]
 
 use cortex_m_rt::entry;
-/// USART1 reads GPS data from GP-735T and sends it over USART2.
 use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
 use stm32l4::stm32l4x2::{self, interrupt};
 
