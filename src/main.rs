@@ -25,6 +25,11 @@ fn USART1() {
             usart2.tdr.write(|w| w.tdr().bits(received_byte));
         }
     }
+    // See reference manual p.1206 or ch. 38.7.
+    // RXNE interrupt can also be triggered by overrun error. Flag must be cleared.
+    if usart1.isr.read().ore().bit_is_set() {
+        usart1.icr.write(|w| w.orecf().set_bit());
+    }
 }
 
 /// Turn on/off A12 based on received byte
