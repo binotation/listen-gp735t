@@ -1,5 +1,6 @@
 //! USART1 reads GPS data from GP-735T and sends it over USART2.
 //! USART2 reads input and toggles GPS ON/OFF if b'0'/b'1'.
+//! TODO: DMA
 
 #![no_std]
 #![no_main]
