@@ -36,4 +36,4 @@ monitor arm semihosting enable
 
 load
 
-stepi
+continue

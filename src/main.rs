@@ -16,8 +16,8 @@ fn USART1() {
     let usart1 = unsafe { USART1_PERIPHERAL.as_mut() }.unwrap();
     let usart2 = unsafe { USART2_PERIPHERAL.as_mut() }.unwrap();
     if usart1.isr.read().rxne().bit_is_set() {
-        // Read off USART1 RX
-        let received_byte = usart1.rdr.read().rdr().bits(); // Reading RDR clears RXNE
+        // Read off USART1 RX, this clears RXNE flag
+        let received_byte = usart1.rdr.read().rdr().bits();
 
         if received_byte != 0 {
             // Write to USART2 TX
@@ -38,15 +38,18 @@ fn USART2() {
     let usart2 = unsafe { USART2_PERIPHERAL.as_mut() }.unwrap();
     let gpioa = unsafe { GPIOA_PERIPHERAL.as_mut() }.unwrap();
     if usart2.isr.read().rxne().bit_is_set() {
-        // Read off USART2 RX
-        let received_byte = usart2.rdr.read().rdr().bits(); // Reading RDR clears RXNE
+        // Read off USART2 RX, this clears RXNE flag
+        let received_byte = usart2.rdr.read().rdr().bits();
 
         // Turn off if '0', turn on if '1'
-        if received_byte == 48 {
+        if received_byte == b'0'.into() {
             gpioa.bsrr.write(|w| w.br12().set_bit());
-        } else if received_byte == 49 {
+        } else if received_byte == b'1'.into() {
             gpioa.bsrr.write(|w| w.bs12().set_bit());
         }
+    }
+    if usart2.isr.read().ore().bit_is_set() {
+        usart2.icr.write(|w| w.orecf().set_bit());
     }
 }
 
@@ -74,7 +77,7 @@ fn main() -> ! {
             .moder10()
             .alternate()
             .moder12()
-            .output()
+            .output() // push-pull by default
     });
     dp.GPIOA.ospeedr.write(|w| {
         w.ospeedr2()
@@ -90,20 +93,13 @@ fn main() -> ! {
     dp.GPIOA.afrh.write(|w| w.afrh9().af7().afrh10().af7());
 
     // Configure baud rate 9600
-    dp.USART1.brr.write(|w| w.brr().bits(417)); // 4Mhz / 38400 approx. 104
+    dp.USART1.brr.write(|w| w.brr().bits(417)); // 4Mhz / 9600 approx. 417
     dp.USART2.brr.write(|w| w.brr().bits(417)); // 4Mhz / 9600 approx. 417
 
     // Enable USART, transmitter, receiver and RXNE interrupt
-    dp.USART1.cr1.write(|w| {
-        w.re()
-            .enabled()
-            .te()
-            .enabled()
-            .ue()
-            .enabled()
-            .rxneie()
-            .enabled()
-    });
+    dp.USART1
+        .cr1
+        .write(|w| w.re().enabled().ue().enabled().rxneie().enabled());
     dp.USART2.cr1.write(|w| {
         w.re()
             .enabled()
