@@ -50,7 +50,12 @@ fn USART2() {
     if usart2.isr.read().txe().bit_is_set() {
         match buffer.dequeue() {
             // Write dequeued byte
-            Some(byte) => usart2.tdr.write(|w| w.tdr().bits(byte)),
+            Some(byte) => {
+                usart2.tdr.write(|w| w.tdr().bits(byte));
+                if buffer.is_empty() {
+                    usart2.cr1.modify(|_, w| w.txeie().disabled());
+                }
+            }
             // Buffer is empty, disable USART2 TXE interrupt
             None => usart2.cr1.modify(|_, w| w.txeie().disabled()),
         }
